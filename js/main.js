@@ -2,116 +2,77 @@ if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
 
 var container, stats;
 
-var camera, scene, renderer;
+var camera, scene, scene2, renderer, controls;
 
-var uniforms;
+var globalUniforms, spinner, feedbackShader, baseShader, baseTexture;
+var windowHalfX = window.innerWidth / 2;
+var windowHalfY = window.innerHeight / 2;
 
 init();
 animate();
-
 function init() {
-
+	width = window.innerWidth;
+	height = window.innerHeight;
 	container = document.getElementById( 'container' );
 	scene = new THREE.Scene();
+	scene2 = new THREE.Scene();
 
-	camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.001, 200000 );
-	camera.position.set(0,0,800);
-	camera.lookAt(scene.position);
+	camera = new THREE.Camera();
+	camera.position.z = 1;
 
 	renderer = new THREE.WebGLRenderer({preserveDrawingBuffer:true});
 	renderer.setClearColor(0xffffff, 1);
-	renderer.autoClearColor = false;
-	renderer.setSize(window.innerWidth,window.innerHeight);
+	// renderer.autoClearColor = false;
+	renderer.setSize(width, height);
 	container.appendChild( renderer.domElement );
 
-	controls = new THREE.OrbitControls(camera);
-	var light = new THREE.PointLight(0xffffff);
-	light.position.set(0,0,-400);
-	scene.add(light);
-	var light2 = new THREE.AmbientLight(0xffffff);
-	// light.position.set(0,0,50);
-	scene.add(light2);
 
-	// var geometry = new THREE.BoxGeometry( 40, 40,40 );
-	// var textures = [];
+	rt1 = new THREE.WebGLRenderTarget(width, height, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat });
+    rt2 = new THREE.WebGLRenderTarget(width, height, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat });
 
-	// for(var i = 1; i < 16; i++){
-	// 	// var texture = new THREE.ImageUtils.loadTexture("textures/diamond" + i + ".jpg");
-	// 	var image = new Image();
-	// 	image.src = "textures/diamond" + i + ".jpg";
-	// 	var texture = new THREE.Texture( image );
-	// 	texture.wrapS = THREE.RepeatWrapping;
-	// 	texture.wrapT = THREE.RepeatWrapping;
-	// 	texture.repeat.set( 30, 30 );
-	// 	textures.push(texture);
-	// }
-	// var texture = new THREE.ImageUtils.loadTexture("textures/diamonds.jpg");
-	// 			texture.wrapS = THREE.RepeatWrapping;
-	// 			texture.wrapT = THREE.RepeatWrapping;
-	// 			texture.repeat.set( 40, 40 );
 	globalUniforms = {
 		time: { type:'f', value: 0.0 },
-		resolution: { type:'v2', value: new THREE.Vector2() }
+		resolution: { type:'v2', value: new THREE.Vector2() },
+		mouse: { type:'v2', value: new THREE.Vector2() }
 	}
-	spinner = new THREE.Object3D();
+	var planeGeometry = new THREE.PlaneBufferGeometry(2,2);
 
-	function addTexture(t, index){
-		// textures.push(t);
-		// var geometry = new THREE.PlaneBufferGeometry(t.image.width,t.image.height);
-		var geometry = new THREE.PlaneBufferGeometry(400,400);
-
-		var uniforms = {
-			texture: { type:'t', value: t },
-			time: globalUniforms.time,
-			resolution: globalUniforms.resolution
-		}
-
-		var material = new THREE.ShaderMaterial({
-			uniforms: uniforms,
-			vertexShader: document.getElementById( 'vertexShader' ).textContent,
-			fragmentShader: document.getElementById( 'fragmentShader' ).textContent,
-			side: THREE.DoubleSide
-		});
-		// var material = new THREE.MeshBasicMaterial({
-		// 	map: t,
-		// 	transparent: true,
-		// 	side: THREE.DoubleSide
-		// })
-		var mesh = new THREE.Mesh(geometry, material);
-		// mesh.position.set((i*30)-(15*15), i,-50);
-		mesh.position.set(Math.sin(360/index)*400*4,0,Math.cos(360/index)*400*4);
-		mesh.rotation.y = 360/index;
-		// mesh.rotation.x = Math.cos(360/index);
-		// scene.add(mesh);
-		spinner.add(mesh);
+	baseTexture = new THREE.ImageUtils.loadTexture("textures/icy3.jpg");
+	baseTexture2 = new THREE.ImageUtils.loadTexture("textures/underwater2.png");
+	var feedbackUniforms = {
+		texture: { type:'t', value: baseTexture },
+		texture2: { type:'t', value: baseTexture2 },
+		time: globalUniforms.time,
+		resolution: globalUniforms.resolution
 	}
-	textures = [];
+    feedbackShader = new THREE.ShaderMaterial({
+		uniforms: feedbackUniforms,
+		vertexShader: document.getElementById( 'vertexShader' ).textContent,
+		fragmentShader: document.getElementById( 'baseFs' ).textContent
+	});
+    mesh1 = new THREE.Mesh(planeGeometry, feedbackShader);
+	scene.add(mesh1);
 
-	function createTexture(index){
-		texture = new THREE.ImageUtils.loadTexture("textures/diamond"+(index+1)+".jpg", undefined, function(t){
-			addTexture(t, index);
-		});
-
+	var uniforms = {
+		texture: { type: 't', value: rt1},
+		texture2: { type:'t', value: baseTexture2 },
+		time: globalUniforms.time,
+		resolution: globalUniforms.resolution
 	}
-	var pWidth,pHeight;
-	for (var index = 0; index < 56; index++){
-
-		createTexture(index);
-
-	}
-	spinner.position.set(0,0,0);
-	scene.add(spinner);
-
-	// for(var i = 0; i < textures.length)
-
-	// stats = new Stats();
-	// stats.domElement.style.position = 'absolute';
-	// stats.domElement.style.top = '0px';
-	// container.appendChild( stats.domElement );
+    baseShader = new THREE.ShaderMaterial({
+		uniforms: uniforms,
+		vertexShader: document.getElementById( 'vertexShader' ).textContent,
+		fragmentShader: document.getElementById( 'feedbackFs' ).textContent,
+		side: THREE.DoubleSide
+	});
+	mesh2 = new THREE.Mesh(planeGeometry, baseShader)
+	scene2.add(mesh2);
 
 	onWindowResize();
 
 	window.addEventListener( 'resize', onWindowResize, false );
+	window.addEventListener( 'mousemove', onMouseMove, false );
+	window.addEventListener( 'keydown', onKeyDown, false );
 
 }
 
@@ -125,6 +86,56 @@ function onWindowResize( event ) {
 
 }
 
+function onMouseMove( event ){
+	console.log( event.clientX - windowHalfX);
+	console.log( event.clientY - windowHalfY);
+	globalUniforms.mouse.value.x = ( event.clientX - windowHalfX );
+	globalUniforms.mouse.value.y = ( event.clientY - windowHalfY );
+}
+			function onKeyDown( event ){
+				if( event.keyCode == "32"){
+					screenshot();
+					
+			function screenshot(){
+				// var i = renderer.domElement.toDataURL('image/png');
+				var blob = dataURItoBlob(renderer.domElement.toDataURL('image/png'));
+				var file = window.URL.createObjectURL(blob);
+				var img = new Image();
+				img.src = file;
+			    img.onload = function(e) {
+				    // window.URL.revokeObjectURL(this.src);
+    			    window.open(this.src);
+
+			    }
+				 // window.open(i)
+				// insertAfter(img, );
+			}
+			//
+					function dataURItoBlob(dataURI) {
+					    // convert base64/URLEncoded data component to raw binary data held in a string
+					    var byteString;
+					    if (dataURI.split(',')[0].indexOf('base64') >= 0)
+					        byteString = atob(dataURI.split(',')[1]);
+					    else
+					        byteString = unescape(dataURI.split(',')[1]);
+
+					    // separate out the mime component
+					    var mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+
+					    // write the bytes of the string to a typed array
+					    var ia = new Uint8Array(byteString.length);
+					    for (var i = 0; i < byteString.length; i++) {
+					        ia[i] = byteString.charCodeAt(i);
+					    }
+
+					    return new Blob([ia], {type:mimeString});
+					}
+					function insertAfter(newNode, referenceNode) {
+					    referenceNode.parentNode.insertBefore(newNode, referenceNode.nextSibling);
+					}
+				}
+			}
+
 //
 
 function animate() {
@@ -135,17 +146,48 @@ function animate() {
 	// stats.update();
 
 }
-
+var updateVideo = true;
+var translate = false;
+var inc = 0;
+var mesh1,mesh2;
 function render() {
 
-	globalUniforms.time.value += 0.05;
-	spinner.rotation.y = Date.now() * 0.0001;
-	spinner.rotation.z = Date.now() * 0.1;
-	spinner.rotation.x = Date.now() * 0.1;
+	feedbackShader.uniforms.texture.value = baseTexture;
+	baseShader.uniforms.texture.value = rt1;
+
+	globalUniforms.time.value += 0.001;
+	// spinner.rotation.y = Date.now() * 0.0001;
+	// spinner.rotation.z = Date.now() * 0.1;
+	// spinner.rotation.x = Date.now() * 0.1;
 	// mesh.rotation.x = Date.now() * 0.0005;
 	// mesh.rotation.y = Date.now() * 0.0002;	
 	// mesh.rotation.z = Date.now() * 0.0005;	// stats.update();
-	renderer.render( scene, camera );
-	controls.update();
+	if(translate==true){
+		// mesh2.scale.x = 1.0005;
+		// mesh2.scale.y = 1.0005;
+		mesh2.scale.x = 1.0002;
+		mesh2.scale.y = 1.0002;
+		// mesh2.scale.z = 1.0005;
+		// mesh2.rotation.z = 0.00081;
+		// screen1.scale.y = 0.0081;
+	}
+	inc++
+	if(inc >= 10){
+		updateVideo = false;
+	}
+	if(updateVideo){
+		renderer.render(scene, camera, rt1, false);				
+	}
+	else if (updateVideo == false){
+		translate = true;
+	}
+
+	renderer.render( scene2, camera, rt2, true );
+	renderer.render(scene2, camera);
+
+	var a = rt2;
+	rt2 = rt1;
+	rt1 = a;
+	// controls.update();
 
 }
